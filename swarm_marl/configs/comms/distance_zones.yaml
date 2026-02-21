@@ -1,0 +1,8 @@
+# Distance-based + zones communication model
+
+comm:
+  model: "distance_zones"
+  range: 10  # Euclidean communication range
+  denial_zones:
+    - [5, 5, 10, 10]
+    - [15, 15, 18, 18]

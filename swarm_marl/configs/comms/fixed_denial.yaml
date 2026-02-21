@@ -1,0 +1,7 @@
+# Fixed denial zones communication model
+
+comm:
+  model: "fixed_denial"
+  denial_zones:
+    - [5, 5, 10, 10]   # [x1, y1, x2, y2]
+    - [15, 15, 18, 18]

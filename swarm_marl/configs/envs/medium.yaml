@@ -1,0 +1,28 @@
+# Medium configuration: 30x30 grid, 10 agents
+
+env:
+  grid_size: 30
+  num_agents: 10
+  max_steps: 500
+  obstacle_density: 0.15
+  coverage_threshold: 0.9
+
+pheromone:
+  max_level: 10
+  decay_rate: 1
+  discovery_deposit: 3
+  return_deposit: 3
+
+agent:
+  tau_min: 1
+  tau_max: 10
+  tau_default: 5
+  tau_delta: 1
+
+training:
+  num_episodes: 50000
+
+reward:
+  alpha: 1.0
+  beta: 0.01
+  gamma: 0.1

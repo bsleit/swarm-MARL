@@ -1,0 +1,8 @@
+# Probabilistic per-cell communication model
+
+comm:
+  model: "probabilistic"
+  # Probability will be randomly generated per cell (0.0-1.0)
+  # or load from a predefined map file
+  prob_map: null
+  default_prob: 0.8

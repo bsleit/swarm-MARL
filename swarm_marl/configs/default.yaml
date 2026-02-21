@@ -1,0 +1,68 @@
+# Default configuration for MARL Swarm SAR
+
+# Environment Settings
+env:
+  grid_size: 20
+  num_agents: 5
+  max_steps: 20
+  obstacle_density: 0.15
+  coverage_threshold: 0.9
+  rendezvous_point: "center"  # or [x, y]
+
+# Pheromone Settings
+pheromone:
+  max_level: 10
+  decay_rate: 1
+  discovery_deposit: 3
+  return_deposit: 3
+
+# Communication Settings
+comm:
+  model: "fixed_denial"  # options: fixed_denial, probabilistic, distance_zones
+  range: 10  # for distance_zones model
+  denial_zones: []  # list of [[x1, y1, x2, y2], ...] for fixed_denial
+  prob_map: null  # path to probability map or null for random
+
+# Agent Settings
+agent:
+  tau_min: 1
+  tau_max: 10
+  tau_default: 5
+  tau_delta: 1
+  observation_radius: 1  # 3x3 window
+
+# QMIX Training Settings
+training:
+  num_episodes: 50000
+  batch_size: 32
+  replay_buffer_size: 5000
+  learning_rate: 0.0005
+  gamma: 0.99
+  target_update_interval: 200
+  gradient_clip: 10.0
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay_steps: 50000
+
+# Network Architecture
+network:
+  agent_hidden_dim: 64
+  gru_hidden_dim: 64
+  mixing_embed_dim: 32
+
+# Reward Weights
+reward:
+  alpha: 1.0  # coverage reward weight
+  beta: 0.01  # step penalty weight
+  gamma: 0.1  # communication cost weight
+
+# Device Settings
+device: "auto"  # auto, cpu, or cuda
+
+# Random Seed
+seed: 42
+
+# Logging
+log_interval: 100
+save_interval: 1000
+results_dir: "results"
