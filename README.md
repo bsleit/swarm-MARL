@@ -9,6 +9,9 @@ A complete Multi-Agent Reinforcement Learning (MARL) system for Search and Rescu
 - **QMIX Implementation**:  [InProgress] Custom implementation following EPyMARL patterns
 - **Evaluation Metrics**: Coverage rate, steps to completion, communication cost
 
+## Sample Walk [InProgress]
+![](swarm_marl/episode_1.gif)
+
 ## Installation
 
 ```bash
@@ -18,51 +21,6 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-## Project Structure
-
-```
-swarm_marl/
-├── configs/              # YAML configuration files
-│   ├── default.yaml      # Default hyperparameters
-│   ├── envs/             # Environment configs
-│   │   ├── small.yaml    # 20x20, 5 agents
-│   │   ├── medium.yaml   # 30x30, 10 agents
-│   │   └── large.yaml    # 50x50, 20 agents
-│   └── comms/            # Communication configs
-│       ├── fixed_denial.yaml
-│       ├── probabilistic.yaml
-│       └── distance_zones.yaml
-├── envs/                 # PettingZoo environment
-│   ├── sar_env.py        # Main ParallelEnv
-│   ├── grid_world.py     # Grid, obstacles, comm zones
-│   ├── agent.py          # Agent state & logic
-│   ├── pheromone.py      # Pheromone field mechanics
-│   └── comm_model.py     # Communication models
-├── models/               # Neural network architectures
-│   ├── agent_network.py  # Per-agent Q-network
-│   └── mixing_network.py # QMIX mixing network
-├── algos/                # MARL algorithms
-│   ├── qmix.py           # QMIX trainer
-│   ├── replay_buffer.py  # Experience replay
-│   └── epsilon.py        # Exploration schedule
-├── baselines/            # Baseline policies
-│   ├── random_walk.py
-│   └── static_pheromone.py
-├── evaluation/           # Metrics & visualizers
-│   ├── metrics.py
-│   └── visualizer.py
-├── scripts/              # Entry points
-│   ├── train.py
-│   ├── evaluate.py
-│   ├── compare.py
-│   └── visualize.py
-└── tests/                # Unit tests
-    ├── test_env.py
-    ├── test_pheromone.py
-    ├── test_qmix.py
-    └── test_baselines.py
-```
 
 ## Configuration
 
