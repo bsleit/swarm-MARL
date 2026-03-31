@@ -55,10 +55,21 @@ class GridWorld:
         self.total_explorable = size * size
         self.explored_count = 0
 
-    def reset(self, agent_positions: Optional[dict] = None) -> None:
-        """Reset the grid world."""
+    def reset(self, agent_positions: Optional[dict] = None, seed: Optional[int] = None) -> None:
+        """Reset the grid world.
+
+        Args:
+            agent_positions: Optional pre-set agent positions.
+            seed: If provided, re-seed the RNG for reproducibility.
+        """
+        if seed is not None:
+            self.rng = np.random.RandomState(seed)
+
         # Clear grid
         self.grid.fill(CellType.UNEXPLORED)
+
+        # Recalculate total explorable (reset before obstacle generation)
+        self.total_explorable = self.size * self.size
 
         # Generate obstacles
         self._generate_obstacles()
