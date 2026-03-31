@@ -26,6 +26,17 @@ def load_config(config_path: str) -> dict:
     return config
 
 
+def deep_merge(base: dict, override: dict) -> dict:
+    """Deep merge two dicts; override values take precedence."""
+    result = base.copy()
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+
 def evaluate_policy(env: SAREnv, policy, n_episodes: int = 100,
                     render: bool = False, render_dir: str = None,
                     save_frames: bool = False) -> Dict:
@@ -46,8 +57,9 @@ def evaluate_policy(env: SAREnv, policy, n_episodes: int = 100,
     tracker = MetricsTracker()
     episode_frames = []
 
+    base_seed = env.config.get('seed', 42)
     for ep in range(n_episodes):
-        observations, infos = env.reset()
+        observations, infos = env.reset(seed=base_seed + ep)
         tracker.reset_current()
 
         done = False
@@ -83,59 +95,59 @@ def evaluate_policy(env: SAREnv, policy, n_episodes: int = 100,
             tracker.add_step(coverage, reward, comm_count)
 
             # Render
-            if render and render_dir:
-                visualizer = GridVisualizer(env.grid_size)
-                current_step = tracker.current['steps']  # step index just recorded
+            # if render and render_dir:
+            #     visualizer = GridVisualizer(env.grid_size)
+            #     current_step = tracker.current['steps']  # step index just recorded
 
-                coverage_pct = int(env.grid_world.get_coverage() * 100)
+            #     coverage_pct = int(env.grid_world.get_coverage() * 100)
 
-                if save_frames:
-                    # Save individual PNG for this step
-                    ep_dir = os.path.join(render_dir, f'episode_{ep:03d}')
-                    os.makedirs(ep_dir, exist_ok=True)
-                    frame_path = os.path.join(
-                        ep_dir, f'step_{current_step:04d}_cov{coverage_pct:03d}.png'
-                    )
-                    frame = visualizer.render(
-                        env.grid_world,
-                        env.pheromone_field,
-                        env.agents_dict,
-                        env.comm_model,
-                        save_path=frame_path,
-                        title=f'Episode {ep} | Step {current_step} | Coverage {coverage_pct}%'
-                    )
-                else:
-                    frame = visualizer.render(
-                        env.grid_world,
-                        env.pheromone_field,
-                        env.agents_dict,
-                        env.comm_model
-                    )
-                episode_frames.append(frame)
+            #     if save_frames:
+            #         # Save individual PNG for this step
+            #         ep_dir = os.path.join(render_dir, f'episode_{ep:03d}')
+            #         os.makedirs(ep_dir, exist_ok=True)
+            #         frame_path = os.path.join(
+            #             ep_dir, f'step_{current_step:04d}_cov{coverage_pct:03d}.png'
+            #         )
+            #         frame = visualizer.render(
+            #             env.grid_world,
+            #             env.pheromone_field,
+            #             env.agents_dict,
+            #             env.comm_model,
+            #             save_path=frame_path,
+            #             title=f'Episode {ep} | Step {current_step} | Coverage {coverage_pct}%'
+            #         )
+            #     else:
+            #         frame = visualizer.render(
+            #             env.grid_world,
+            #             env.pheromone_field,
+            #             env.agents_dict,
+            #             env.comm_model
+            #         )
+            #     episode_frames.append(frame)
 
             observations = next_observations
 
         # End episode
         metrics = tracker.end_episode(any(terminations.values()))
 
-        if render and render_dir and episode_frames:
-            from PIL import Image
-            os.makedirs(render_dir, exist_ok=True)
-            images = [Image.fromarray(f) for f in episode_frames]
-            images[0].save(
-                os.path.join(render_dir, f'episode_{ep:03d}.gif'),
-                save_all=True,
-                append_images=images[1:],
-                duration=200,
-                loop=0
-            )
-            episode_frames = []
+        # if render and render_dir and episode_frames:
+        #     from PIL import Image
+        #     os.makedirs(render_dir, exist_ok=True)
+        #     images = [Image.fromarray(f) for f in episode_frames]
+        #     images[0].save(
+        #         os.path.join(render_dir, f'episode_{ep:03d}.gif'),
+        #         save_all=True,
+        #         append_images=images[1:],
+        #         duration=200,
+        #         loop=0
+        #     )
+        #     episode_frames = []
 
-        if save_frames and render_dir:
-            ep_dir = os.path.join(render_dir, f'episode_{ep:03d}')
-            n_frames = tracker.current['steps'] if tracker.current else len(tracker.episode_data[-1]['coverages'])
-            outcome = 'COMPLETED' if tracker.episode_data[-1]['terminated'] else 'TIMEOUT'
-            print(f"  Episode {ep}: saved {len(os.listdir(ep_dir)) if os.path.isdir(ep_dir) else 0} frames → {ep_dir}  [{outcome}]")
+        # if save_frames and render_dir:
+        #     ep_dir = os.path.join(render_dir, f'episode_{ep:03d}')
+        #     n_frames = tracker.current['steps'] if tracker.current else len(tracker.episode_data[-1]['coverages'])
+        #     outcome = 'COMPLETED' if tracker.episode_data[-1]['terminated'] else 'TIMEOUT'
+        #     print(f"  Episode {ep}: saved {len(os.listdir(ep_dir)) if os.path.isdir(ep_dir) else 0} frames → {ep_dir}  [{outcome}]")
 
     # Aggregate metrics
     all_metrics = tracker.get_all_metrics()
@@ -180,7 +192,7 @@ def main():
 
     if args.env_config:
         env_config = load_config(args.env_config)
-        config.update(env_config)
+        config = deep_merge(config, env_config)
 
     # Override max_steps if specified via CLI
     if args.max_steps is not None:
