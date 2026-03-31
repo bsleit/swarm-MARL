@@ -112,8 +112,8 @@ class SAREnv(ParallelEnv):
         """Reset the environment."""
         self.agents = self.possible_agents[:]
 
-        # Reset components
-        self.grid_world.reset()
+        # Reset components (propagate seed to grid_world for reproducibility)
+        self.grid_world.reset(seed=seed)
         self.pheromone_field.reset()
         self.comm_model.reset()
 
