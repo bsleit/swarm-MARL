@@ -312,7 +312,7 @@ class QMIXTrainer:
 
     def get_epsilon(self) -> float:
         """Get current epsilon value."""
-        return self.epsilon_scheduler.get_epsilon(self.train_step_count)
+        return self.epsilon_scheduler.get_epsilon(self.episode_count)
 
     def increment_episode(self) -> None:
         """Increment episode counter."""

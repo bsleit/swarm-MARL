@@ -16,7 +16,8 @@ class StaticPheromonePolicy:
     _EPS = 0.05
 
     def __init__(self, num_agents: int, grid_size: int, tau: int = 5,
-                 always_communicate: bool = True, seed: int = 42):
+                 always_communicate: bool = True, novelty_threshold: int = 3,
+                 seed: int = 42):
         """Initialize static pheromone policy.
 
         Args:
@@ -30,6 +31,7 @@ class StaticPheromonePolicy:
         self.grid_size = grid_size
         self.tau = tau
         self.always_communicate = always_communicate
+        self.novelty_threshold = novelty_threshold
         self.rng = np.random.RandomState(seed)
 
         # Movement directions: N=0, S=1, E=2, W=3, STAY=4
@@ -144,8 +146,12 @@ class StaticPheromonePolicy:
             # Increase tau so agents stay as explorers longer (tau_adjust=2 → +1)
             tau_adjust = 2  # Increase
 
-            # Communication
-            communicate = 1 if self.always_communicate else 0
+            # Communication: always-on or novelty-triggered (selective)
+            if self.always_communicate:
+                communicate = 1
+            else:
+                cells_since_last_comm = info.get('cells_since_last_comm', 0)
+                communicate = 1 if cells_since_last_comm >= self.novelty_threshold else 0
 
             # Encode action: locomotion + 5 * (tau_adjust + 3 * communicate)
             action = locomotion + 5 * (tau_adjust + 3 * communicate)
