@@ -5,12 +5,12 @@ A complete Multi-Agent Reinforcement Learning (MARL) system for Search and Rescu
 ## Features
 
 - **PettingZoo Environment**: 2D grid world with configurable obstacles, communication denial zones
-- **Bio-inspired Baseline**: [InProgress] Pheromone-based task allocation with fixed threshold
-- **QMIX Implementation**:  [InProgress] Custom implementation following EPyMARL patterns
+- **Bio-inspired Baseline**: Pheromone-based task allocation with fixed threshold
+- **QMIX Implementation**: Custom implementation following EPyMARL patterns
 - **Evaluation Metrics**: Coverage rate, steps to completion, communication cost
 
-## Sample Walk [InProgress]
-![](swarm_marl/episode_1.gif)
+## Sample Walk 
+![](output.gif)
 
 ## Installation
 
