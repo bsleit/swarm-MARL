@@ -4,10 +4,11 @@
 env:
   grid_size: 20
   num_agents: 5
-  max_steps: 20
+  max_steps: 1000
   obstacle_density: 0.15
   coverage_threshold: 0.9
   rendezvous_point: "center"  # or [x, y]
+  partial_observability: true  # agents see only their obs_radius window; false = full visibility (backward-compatible)
 
 # Pheromone Settings
 pheromone:
@@ -18,10 +19,11 @@ pheromone:
 
 # Communication Settings
 comm:
-  model: "fixed_denial"  # options: fixed_denial, probabilistic, distance_zones
-  range: 10  # for distance_zones model
-  denial_zones: []  # list of [[x1, y1, x2, y2], ...] for fixed_denial
+  model: "distance_zones"  # range-limited; options: fixed_denial, probabilistic, distance_zones
+  range: 10  # Euclidean distance limit for distance_zones (~35% of 20x20 diagonal ~= 28)
+  denial_zones: []  # list of [[x1, y1, x2, y2], ...] for fixed_denial / distance_zones
   prob_map: null  # path to probability map or null for random
+  novelty_threshold: 3  # min cells explored since last broadcast before agent re-communicates
 
 # Agent Settings
 agent:
