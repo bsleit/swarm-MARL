@@ -42,6 +42,10 @@ class Agent:
         # Communication status
         self.communicated = False
 
+        # Novelty tracking for selective communication
+        self.cells_since_last_comm = 0
+        self.new_cells_received = 0
+
     def reset(self, position: Tuple[int, int], tau: int = 5) -> None:
         """Reset agent state."""
         self.position = position
@@ -52,6 +56,8 @@ class Agent:
         self.comm_buffer = []
         self.prev_action = 0
         self.communicated = False
+        self.cells_since_last_comm = 0
+        self.new_cells_received = 0
 
     def update_position(self, new_position: Tuple[int, int]) -> None:
         """Update agent position."""
@@ -92,7 +98,8 @@ class Agent:
                         grid_world,
                         pheromone_field,
                         agent_positions: Dict[Tuple[int, int], int],
-                        observation_radius: int = 1) -> np.ndarray:
+                        observation_radius: int = 1,
+                        partial_observability: bool = False) -> np.ndarray:
         """Get observation tensor for this agent.
 
         Args:
@@ -107,8 +114,19 @@ class Agent:
         """
         window_size = 2 * observation_radius + 1
 
-        # Channel 0: Cell type (obstacle/explored/unexplored) in 3x3 window
-        cell_type = grid_world.get_observation_window(self.position, observation_radius)
+        # Channel 0: Cell type from agent's local knowledge (partial obs) or global grid
+        if partial_observability and self.local_map is not None:
+            _ws = 2 * observation_radius + 1
+            cell_type = np.full((_ws, _ws), 1, dtype=np.int32)  # default: OBSTACLE (=1)
+            _cx, _cy = self.position
+            for _dy in range(-observation_radius, observation_radius + 1):
+                for _dx in range(-observation_radius, observation_radius + 1):
+                    _x, _y = _cx + _dx, _cy + _dy
+                    _wx, _wy = _dx + observation_radius, _dy + observation_radius
+                    if 0 <= _x < self.local_map.shape[0] and 0 <= _y < self.local_map.shape[1]:
+                        cell_type[_wx, _wy] = self.local_map[_x, _y]
+        else:
+            cell_type = grid_world.get_observation_window(self.position, observation_radius)
         # Normalize: obstacle=1.0, unexplored=0.66, explored=0.33, empty=0.0
         cell_type_norm = np.zeros_like(cell_type, dtype=np.float32)
         cell_type_norm[cell_type == 1] = 1.0  # OBSTACLE

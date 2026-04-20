@@ -125,9 +125,9 @@ class AgentNetworkGroup(nn.Module):
 
         # Reshape to process all agents
         # (batch * n_agents, ...)
-        obs_flat = observations.view(-1, observations.shape[-1])
-        prev_actions_flat = prev_actions.view(-1, self.n_actions)
-        hidden_flat = hidden_states.view(-1, hidden_states.shape[-1])
+        obs_flat = observations.reshape(-1, observations.shape[-1])
+        prev_actions_flat = prev_actions.reshape(-1, self.n_actions)
+        hidden_flat = hidden_states.reshape(-1, hidden_states.shape[-1])
 
         # Repeat agent IDs for batch
         agent_ids_batch = self.agent_ids.unsqueeze(0).expand(batch_size, -1, -1)

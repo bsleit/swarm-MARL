@@ -5,7 +5,7 @@ from typing import Dict, Tuple, Optional, Any
 from pettingzoo import ParallelEnv
 from gymnasium import spaces
 
-from .grid_world import GridWorld, Direction
+from .grid_world import GridWorld, Direction, CellType
 from .pheromone import PheromoneField
 from .agent import Agent, AgentRole
 from .comm_model import create_comm_model
@@ -50,6 +50,7 @@ class SAREnv(ParallelEnv):
         self.tau_default = config['agent']['tau_default']
         self.tau_delta = config['agent']['tau_delta']
         self.obs_radius = config['agent']['observation_radius']
+        self.partial_observability = config['env'].get('partial_observability', False)
 
         # Reward weights
         self.alpha = config['reward']['alpha']
@@ -138,10 +139,19 @@ class SAREnv(ParallelEnv):
         self.prev_coverage = 0.0
         self.cumulative_reward = 0.0
 
-        # Mark initial positions as explored
+        # Mark initial positions as explored; initialise each agent's local knowledge
         for agent in self.agents_dict.values():
             self.grid_world.mark_explored(agent.position)
-            agent.local_map = self.grid_world.grid.copy()
+            if self.partial_observability:
+                # Agents know obstacle layout but start with everything else unexplored
+                local_map = np.full(
+                    (self.grid_size, self.grid_size), CellType.UNEXPLORED, dtype=np.int32
+                )
+                local_map[self.grid_world.grid == CellType.OBSTACLE] = CellType.OBSTACLE
+                agent.local_map = local_map
+                self._reveal_local_map(agent)
+            else:
+                agent.local_map = self.grid_world.grid.copy()
 
         # Get initial observations
         observations = self._get_observations()
@@ -190,6 +200,11 @@ class SAREnv(ParallelEnv):
             if newly_explored:
                 agent.add_stimulus(1.0)  # Add stimulus for discovery
 
+            # Update agent's partial-observability local map
+            if self.partial_observability:
+                new_cells = self._reveal_local_map(agent)
+                agent.cells_since_last_comm += new_cells
+
             # Deposit pheromone based on role
             if agent.role == AgentRole.EXPLORER:
                 self.pheromone_field.deposit(
@@ -203,8 +218,19 @@ class SAREnv(ParallelEnv):
             # Check role switch
             agent.check_role_switch()
 
+        # Reset per-step received-cells counter before processing communications
+        if self.partial_observability:
+            for _ag in self.agents_dict.values():
+                _ag.new_cells_received = 0
+
         # Process communications
         self._process_communications()
+
+        # After broadcasting: reset novelty counter so agents don't re-broadcast immediately
+        if self.partial_observability:
+            for _ag in self.agents_dict.values():
+                if _ag.communicated:
+                    _ag.cells_since_last_comm = 0
 
         # Decay pheromones
         self.pheromone_field.decay()
@@ -235,11 +261,14 @@ class SAREnv(ParallelEnv):
         for agent_id in self.agents:
             terminations[agent_id] = terminated
             truncations[agent_id] = truncated
+            _ag = self.agents_dict[agent_id]
             infos[agent_id] = {
                 'coverage': coverage,
                 'steps': self.steps,
-                'role': int(self.agents_dict[agent_id].role),
-                'tau': self.agents_dict[agent_id].tau,
+                'role': int(_ag.role),
+                'tau': _ag.tau,
+                'cells_since_last_comm': _ag.cells_since_last_comm,
+                'new_cells_received': _ag.new_cells_received,
             }
 
         # Remove terminated agents
@@ -281,7 +310,47 @@ class SAREnv(ParallelEnv):
                         })
                         # Merge maps
                         if receiver.local_map is not None and sender.local_map is not None:
-                            receiver.local_map = np.maximum(receiver.local_map, sender.local_map)
+                            if self.partial_observability:
+                                # OBSTACLE=1 < UNEXPLORED=2 < EXPLORED=3, so np.maximum
+                                # would silently overwrite obstacle cells with higher values.
+                                # Preserve obstacle knowledge: a cell is an obstacle if
+                                # either agent's map marks it as such.
+                                before_map = receiver.local_map.copy()
+                                merged = np.maximum(receiver.local_map, sender.local_map)
+                                obstacle_mask = (
+                                    (receiver.local_map == CellType.OBSTACLE) |
+                                    (sender.local_map == CellType.OBSTACLE)
+                                )
+                                merged[obstacle_mask] = CellType.OBSTACLE
+                                receiver.local_map = merged
+                                receiver.new_cells_received += int(
+                                    np.sum(before_map != merged)
+                                )
+                            else:
+                                receiver.local_map = np.maximum(
+                                    receiver.local_map, sender.local_map
+                                )
+
+    def _reveal_local_map(self, agent: Agent) -> int:
+        """Sync agent's local_map with global grid within obs_radius.
+
+        Returns the number of cells newly revealed (transitioned from UNEXPLORED).
+        """
+        if agent.local_map is None:
+            return 0
+        revealed = 0
+        cx, cy = agent.position
+        for dy in range(-self.obs_radius, self.obs_radius + 1):
+            for dx in range(-self.obs_radius, self.obs_radius + 1):
+                x, y = cx + dx, cy + dy
+                if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                    global_val = self.grid_world.grid[x, y]
+                    local_val = agent.local_map[x, y]
+                    if local_val != global_val:
+                        if local_val == CellType.UNEXPLORED:
+                            revealed += 1
+                        agent.local_map[x, y] = global_val
+        return revealed
 
     def _get_observations(self) -> Dict[str, np.ndarray]:
         """Get observations for all agents."""
@@ -292,7 +361,8 @@ class SAREnv(ParallelEnv):
                     self.grid_world,
                     self.pheromone_field,
                     self.grid_world.agent_positions,
-                    self.obs_radius
+                    self.obs_radius,
+                    partial_observability=self.partial_observability,
                 )
         return observations
 
