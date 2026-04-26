@@ -280,8 +280,10 @@ class StaticPheromonePolicy:
         self._escape_dir[agent_id] = new_dir
         return new_dir
 
-        return self.rng.choice(best)
 
     def reset(self) -> None:
         """Reset policy state."""
-        pass
+        self._last_dir.clear()
+        self._stuck_count.clear()
+        self._escape_dir.clear()
+        self._escape_steps.clear()
