@@ -1,7 +1,7 @@
 """Replay buffer for QMIX."""
 
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, Optional
 from collections import deque
 
 
@@ -36,11 +36,22 @@ class Episode:
 
     def add(self, state: np.ndarray, observations: np.ndarray,
             actions: np.ndarray, reward: float,
-            terminated: bool, mask: float = 1.0) -> None:
+            terminated: bool, mask: float = 1.0,
+            available_actions: Optional[np.ndarray] = None) -> None:
         """Add a transition to the episode."""
         if self.step >= self.max_steps:
             self.filled = True
             return
+
+        if available_actions is not None:
+            available_actions = np.asarray(available_actions, dtype=np.float32)
+            expected_shape = (self.num_agents, self.avail_actions.shape[-1])
+            if available_actions.shape != expected_shape:
+                raise ValueError(
+                    f"available_actions must have shape {expected_shape}; "
+                    f"got {available_actions.shape}"
+                )
+            self.avail_actions[self.step] = available_actions
 
         self.states[self.step] = state
         self.observations[self.step] = observations
@@ -118,6 +129,7 @@ class EpisodeReplayBuffer:
         batch_states = []
         batch_observations = []
         batch_actions = []
+        batch_avail_actions = []
         batch_rewards = []
         batch_terminated = []
         batch_mask = []
@@ -133,6 +145,7 @@ class EpisodeReplayBuffer:
                 states = np.pad(data['states'], ((0, pad_length), (0, 0)), mode='constant')
                 obs = np.pad(data['observations'], ((0, pad_length), (0, 0), (0, 0)), mode='constant')
                 actions = np.pad(data['actions'], ((0, pad_length), (0, 0)), mode='constant')
+                avail_actions = np.pad(data['avail_actions'], ((0, pad_length), (0, 0), (0, 0)), mode='constant')
                 rewards = np.pad(data['rewards'], (0, pad_length), mode='constant')
                 terminated = np.pad(data['terminated'], (0, pad_length), mode='constant')
                 mask = np.concatenate([data['mask'], np.zeros(pad_length)])
@@ -140,6 +153,7 @@ class EpisodeReplayBuffer:
                 states = data['states']
                 obs = data['observations']
                 actions = data['actions']
+                avail_actions = data['avail_actions']
                 rewards = data['rewards']
                 terminated = data['terminated']
                 mask = data['mask']
@@ -147,6 +161,7 @@ class EpisodeReplayBuffer:
             batch_states.append(states)
             batch_observations.append(obs)
             batch_actions.append(actions)
+            batch_avail_actions.append(avail_actions)
             batch_rewards.append(rewards)
             batch_terminated.append(terminated)
             batch_mask.append(mask)
@@ -155,6 +170,7 @@ class EpisodeReplayBuffer:
             'states': np.array(batch_states),
             'observations': np.array(batch_observations),
             'actions': np.array(batch_actions),
+            'avail_actions': np.array(batch_avail_actions),
             'rewards': np.array(batch_rewards),
             'terminated': np.array(batch_terminated),
             'mask': np.array(batch_mask),

@@ -10,8 +10,33 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from swarm_marl.models.agent_network import AgentQNetwork, AgentNetworkGroup
 from swarm_marl.models.mixing_network import QMIXMixingNetwork
+from swarm_marl.algos.qmix import QMIXTrainer
 from swarm_marl.algos.replay_buffer import Episode, EpisodeReplayBuffer
 from swarm_marl.algos.epsilon import EpsilonScheduler
+
+
+def make_qmix_config():
+    return {
+        'training': {
+            'learning_rate': 0.001,
+            'gamma': 0.99,
+            'target_update_interval': 10,
+            'gradient_clip': 10.0,
+            'batch_size': 2,
+            'replay_buffer_size': 10,
+            'epsilon_start': 1.0,
+            'epsilon_end': 0.05,
+            'epsilon_decay_steps': 100,
+        },
+        'network': {
+            'gru_hidden_dim': 8,
+            'mixing_embed_dim': 4,
+        },
+        'env': {
+            'max_steps': 5,
+        },
+        'seed': 42,
+    }
 
 
 class TestAgentNetwork:
@@ -159,6 +184,30 @@ class TestReplayBuffer:
         # Sample
         batch = buffer.sample(batch_size=3)
         assert batch['batch_size'] == 3
+        assert batch['avail_actions'].shape == (3, 10, 5, 30)
+
+    def test_add_available_actions(self):
+        """Test storing available-action masks."""
+        episode = Episode(
+            num_agents=2,
+            max_steps=5,
+            obs_dim=3,
+            state_dim=4,
+            n_actions=2
+        )
+        available_actions = np.array([[1, 0], [0, 1]], dtype=np.float32)
+
+        episode.add(
+            state=np.zeros(4),
+            observations=np.zeros((2, 3)),
+            actions=np.zeros(2),
+            reward=0.0,
+            terminated=False,
+            available_actions=available_actions
+        )
+
+        data = episode.get_data()
+        np.testing.assert_array_equal(data['avail_actions'][0], available_actions)
 
     def test_can_sample(self):
         """Test can_sample method."""
@@ -214,6 +263,69 @@ class TestEpsilonScheduler:
         # Middle
         eps_500 = scheduler.get_epsilon(500)
         assert 0.05 < eps_500 < 1.0
+
+
+class TestQMIXTrainer:
+    """Tests for QMIXTrainer."""
+
+    def test_select_actions_accepts_previous_action_indices(self):
+        """Test inference with previous actions as per-agent indices."""
+        trainer = QMIXTrainer(
+            obs_dim=4,
+            state_dim=6,
+            n_actions=2,
+            n_agents=3,
+            config=make_qmix_config()
+        )
+
+        observations = np.random.randn(3, 4).astype(np.float32)
+        hidden_states = np.zeros((3, trainer.hidden_dim), dtype=np.float32)
+        prev_actions = np.array([0, 1, 0], dtype=np.int64)
+        available_actions = np.array([[0, 1], [1, 0], [0, 1]], dtype=np.float32)
+
+        actions, new_hidden = trainer.select_actions(
+            observations=observations,
+            hidden_states=hidden_states,
+            epsilon=0.0,
+            available_actions=available_actions,
+            prev_actions=prev_actions
+        )
+
+        np.testing.assert_array_equal(actions, np.array([1, 0, 1]))
+        assert new_hidden.shape == (3, trainer.hidden_dim)
+
+    def test_train_step_accepts_numpy_batch(self):
+        """Test training can consume replay-buffer numpy batches."""
+        trainer = QMIXTrainer(
+            obs_dim=4,
+            state_dim=6,
+            n_actions=2,
+            n_agents=3,
+            config=make_qmix_config()
+        )
+        episode = Episode(
+            num_agents=3,
+            max_steps=5,
+            obs_dim=4,
+            state_dim=6,
+            n_actions=2
+        )
+
+        for _ in range(3):
+            episode.add(
+                state=np.random.randn(6).astype(np.float32),
+                observations=np.random.randn(3, 4).astype(np.float32),
+                actions=np.random.randint(0, 2, size=3),
+                reward=1.0,
+                terminated=False
+            )
+
+        trainer.replay_buffer.add(episode)
+        batch = trainer.replay_buffer.sample(batch_size=1)
+
+        loss = trainer.train_step(batch)
+
+        assert isinstance(loss, float)
 
 
 if __name__ == '__main__':

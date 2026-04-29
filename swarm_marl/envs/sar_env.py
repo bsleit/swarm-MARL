@@ -109,6 +109,11 @@ class SAREnv(ParallelEnv):
             low=0.0, high=1.0, shape=(state_dim,), dtype=np.float32
         )
 
+    @property
+    def num_agents(self) -> int:
+        """Number of agents configured for the environment."""
+        return self._num_agents
+
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[Dict, Dict]:
         """Reset the environment."""
         self.agents = self.possible_agents[:]

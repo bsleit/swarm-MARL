@@ -111,7 +111,8 @@ class QMIXTrainer:
         self.episode_count = 0
 
     def select_actions(self, observations: np.ndarray, hidden_states: np.ndarray,
-                       epsilon: float, available_actions: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray]:
+                       epsilon: float, available_actions: Optional[np.ndarray] = None,
+                       prev_actions: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray]:
         """Select actions using epsilon-greedy.
 
         Args:
@@ -119,6 +120,8 @@ class QMIXTrainer:
             hidden_states: (n_agents, hidden_dim)
             epsilon: Exploration rate
             available_actions: (n_agents, n_actions) binary mask
+            prev_actions: Previous actions, either as action indices
+                (n_agents,) or one-hot vectors (n_agents, n_actions)
 
         Returns:
             Tuple of (actions, new_hidden_states)
@@ -127,15 +130,49 @@ class QMIXTrainer:
         obs_tensor = torch.FloatTensor(observations).unsqueeze(0).to(self.device)
         hidden_tensor = torch.FloatTensor(hidden_states).unsqueeze(0).to(self.device)
 
-        # Get Q-values
-        # Need previous actions - use zeros for first step
-        prev_actions = torch.zeros(1, self.n_agents, self.n_actions).to(self.device)
+        if prev_actions is None:
+            prev_actions_tensor = torch.zeros(
+                1, self.n_agents, self.n_actions, device=self.device
+            )
+        else:
+            prev_actions_array = np.asarray(prev_actions)
+            if prev_actions_array.shape == (self.n_agents,):
+                prev_actions_tensor = F.one_hot(
+                    torch.as_tensor(prev_actions_array, dtype=torch.long, device=self.device),
+                    num_classes=self.n_actions
+                ).float().unsqueeze(0)
+            elif prev_actions_array.shape == (self.n_agents, self.n_actions):
+                prev_actions_tensor = torch.as_tensor(
+                    prev_actions_array, dtype=torch.float32, device=self.device
+                ).unsqueeze(0)
+            elif prev_actions_array.shape == (1, self.n_agents, self.n_actions):
+                prev_actions_tensor = torch.as_tensor(
+                    prev_actions_array, dtype=torch.float32, device=self.device
+                )
+            else:
+                raise ValueError(
+                    "prev_actions must have shape "
+                    f"({self.n_agents},), ({self.n_agents}, {self.n_actions}), "
+                    f"or (1, {self.n_agents}, {self.n_actions}); got "
+                    f"{prev_actions_array.shape}"
+                )
 
         with torch.no_grad():
-            q_values, new_hidden = self.agent_network(obs_tensor, prev_actions, hidden_tensor)
+            q_values, new_hidden = self.agent_network(
+                obs_tensor, prev_actions_tensor, hidden_tensor
+            )
 
         q_values = q_values.squeeze(0).cpu().numpy()
         new_hidden = new_hidden.squeeze(0).cpu().numpy()
+
+        if available_actions is not None:
+            available_actions = np.asarray(available_actions)
+            expected_shape = (self.n_agents, self.n_actions)
+            if available_actions.shape != expected_shape:
+                raise ValueError(
+                    f"available_actions must have shape {expected_shape}; "
+                    f"got {available_actions.shape}"
+                )
 
         # Epsilon-greedy
         actions = np.zeros(self.n_agents, dtype=np.int64)
@@ -175,12 +212,15 @@ class QMIXTrainer:
         self.train_step_count += 1
 
         # Move batch to device
-        states = batch['states'].to(self.device)
-        observations = batch['observations'].to(self.device)
-        actions = batch['actions'].to(self.device)
-        rewards = batch['rewards'].to(self.device)
-        terminated = batch['terminated'].to(self.device)
-        mask = batch['mask'].to(self.device)
+        states = torch.as_tensor(batch['states'], dtype=torch.float32, device=self.device)
+        observations = torch.as_tensor(batch['observations'], dtype=torch.float32, device=self.device)
+        actions = torch.as_tensor(batch['actions'], dtype=torch.long, device=self.device)
+        rewards = torch.as_tensor(batch['rewards'], dtype=torch.float32, device=self.device)
+        terminated = torch.as_tensor(batch['terminated'], dtype=torch.float32, device=self.device)
+        mask = torch.as_tensor(batch['mask'], dtype=torch.float32, device=self.device)
+        avail_actions = batch.get('avail_actions')
+        if avail_actions is not None:
+            avail_actions = torch.as_tensor(avail_actions, dtype=torch.float32, device=self.device)
 
         batch_size = states.shape[0]
         seq_length = states.shape[1]
@@ -230,6 +270,8 @@ class QMIXTrainer:
         # chosen_q shape: (batch, seq_len, n_agents)
 
         # Get max Q-values from target network for next states
+        if avail_actions is not None:
+            target_q_values = target_q_values.masked_fill(avail_actions <= 0, -1e9)
         max_target_q = target_q_values.max(dim=-1)[0]  # (batch, seq_len, n_agents)
 
         # Mix Q-values
